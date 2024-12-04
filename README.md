@@ -45,55 +45,123 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
-## Run tests
+## Rotas no Nest.js
+No Nest.js, as rotas são definidas utilizando decorators como @Controller e @Put.
 
-```bash
-# unit tests
-$ npm run test
+Exemplo:
+```
+  @Controller('/usuarios')
+export class UsuarioController {
+  @Put('/:id')
+  atualizarUsuario(@Param('id') id: string, @Body() dadosAtualizados: AtualizarUsuarioDTO) {
+    // Lógica para atualizar um usuário
+  }
+}
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
 ```
 
-## Deployment
+- @Controller('/usuarios'): Define um controlador que agrupa as rotas relacionadas a "usuários". Todas as rotas dentro desse controlador começarão com /usuarios.
+- @Put('/:id'): Define uma rota HTTP do tipo PUT, que recebe um parâmetro id. Essa rota seria acessada como, por exemplo, PUT /usuarios/123.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Criação de Decorators Personalizados
+No Nest.js, é possível criar decorators personalizados para encapsular lógica reutilizável.
 
-```bash
-$ npm install -g mau
-$ mau deploy
+Exemplo: Validação Personalizada de Email
+Aqui está um exemplo de como criar um decorator para validar emails únicos em um sistema:
+
+Implementação do Validador:
+```
+import { Injectable } from '@nestjs/common';
+import { UsuarioRepository } from './../usuario.repository';
+import { ValidationArguments, ValidationOptions, ValidatorConstraint, ValidatorConstraintInterface, registerDecorator } from "class-validator";
+
+@Injectable()
+@ValidatorConstraint({ async: true })
+export class EmailValidator implements ValidatorConstraintInterface {
+  constructor(private usuarioRepository: UsuarioRepository) {}
+
+  async validate(value: any, validationArguments?: ValidationArguments): Promise<boolean> {
+    const isEmailUser = await this.usuarioRepository.isEmailValido(value);
+    return !isEmailUser; // Retorna verdadeiro se o email NÃO estiver em uso
+  }
+}
+
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+- @Injectable: Este decorator transforma a classe EmailValidator em um provedor injetável dentro do ecossistema do Nest.js.
+- @ValidatorConstraint({ async: true }): Indica que esta classe é uma restrição de validação e que a validação será feita de forma assíncrona.
 
-## Resources
+Implementação do Decorator:
+```
+export const singleEmail = (validationOptions: ValidationOptions) => {
+  return (object: Object, property: string) => {
+    registerDecorator({
+      target: object.constructor,
+      propertyName: property,
+      options: validationOptions,
+      constraints: [],
+      validator: EmailValidator
+    });
+  };
+};
 
-Check out a few resources that may come in handy when working with NestJS:
+```
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+- registerDecorator: Registra um decorator que será aplicado em propriedades de classes. Aqui estamos associando a lógica de validação ao validador EmailValidator.
 
-## Support
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Uso do Decorator no DTO:
+```
+export class CreateUserDTO {
+  @IsNotEmpty({ message: 'Name can not be empty' })
+  nome: string;
 
-## Stay in touch
+  @IsEmail(undefined, { message: 'Email format invalid!' })
+  @singleEmail({ message: 'User already exists' })
+  email: string;
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+  @MinLength(6, { message: 'Password must have more than 6 characters' })
+  senha: string;
+}
 
-## License
+```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- @IsNotEmpty: Valida que o campo não pode ser vazio.
+- @IsEmail: Valida que o campo possui o formato de um email.
+- @singleEmail: Valida que o email é único utilizando o EmailValidator personalizado.
+
+## Validações com class-validator
+A biblioteca class-validator é usada para aplicar validações em objetos baseados em classes. Decorators são utilizados para definir regras diretamente no DTO (Data Transfer Object).
+
+Exemplo de Validadores Comuns:
+- @IsNotEmpty: Garante que o campo não seja vazio.
+- @IsEmail: Valida o formato do email.
+- @MinLength: Define o comprimento mínimo de um campo.
+
+## O que é @Injectable?
+O decorator @Injectable marca uma classe como um provedor que pode ser injetado em outros componentes usando o sistema de injeção de dependências do Nest.js.
+Exemplo:
+```@Injectable()
+export class UsuarioService {
+  constructor(private usuarioRepository: UsuarioRepository) {}
+
+  async criarUsuario(dados: CreateUserDTO) {
+    return this.usuarioRepository.save(dados);
+  }
+
+ async listar() {
+    return this.usuarios
+  }
+}
+```
+
+- O @Injectable permite que o UsuarioRepository seja injetado no UsuarioService, facilitando o acesso às operações de banco de dados ou lógica de negócios, esse método facilita, para que não seja preciso instanciar a classe sempre que quiser utiliza-la, ou seja, sem ele, precisaríamos fazer new --nome--classe-- para conseguir utilizar os métodos dentro dela, com o Injectable, não é necessário, baste apenas fazer o seguinte para utilizar os métodos dentro da classe com ela ja "injetada"
+```
+// Passar nome da classe no construtor como abaixo:
+constructor(private usuarioRepository: UsuarioRepository) {}
+
+
+// e dai é so usar da seguinte forma:
+    const usuariosSalvos = await this.usuarioRepository.listar()
+```
